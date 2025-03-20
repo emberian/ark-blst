@@ -1,9 +1,11 @@
+use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ec::VariableBaseMSM;
 use ark_ff::Field;
 use ark_ff::UniformRand;
 use ark_serialize::CanonicalDeserialize;
 use ark_serialize::CanonicalSerialize;
+use ark_serialize::Valid;
 use std::ops::Neg;
 
 pub fn field_test<F: Field>() {
@@ -65,6 +67,19 @@ pub fn group_test<G: CurveGroup>() {
     // msm from crate
     let res = <G as VariableBaseMSM>::msm(&affines, &scalars).unwrap();
     assert_eq!(exp, res);
+
+    // --- Cofactor clearing
+    let raw = G::rand(&mut rand::thread_rng());
+    // Clear cofactor using .mul_by_cofactor()
+    let cleared = G::Affine::from(raw).mul_by_cofactor_to_group();
+    // Check that cleared is indeed prime-order
+    assert!(cleared.check().is_ok());
+
+    // -- point at infinity
+    let inf_g1 = G::zero();
+    let inf_affine: G::Affine = inf_g1.into();
+    assert!(inf_g1.is_zero());
+    assert!(inf_affine.is_zero());
 }
 
 pub trait Serializable: Eq + UniformRand + CanonicalSerialize + CanonicalDeserialize {}

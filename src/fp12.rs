@@ -39,7 +39,7 @@ impl Ord for Fp12 {
         match c1.cmp(&Fp6(other.c1())) {
             Ordering::Greater => Ordering::Greater,
             Ordering::Less => Ordering::Less,
-            Ordering::Equal => c0.cmp(&Fp6(other.c0()))
+            Ordering::Equal => c0.cmp(&Fp6(other.c0())),
         }
     }
 }
@@ -520,7 +520,9 @@ impl ark_ff::Field for Fp12 {
             .into_iter()
     }
 
-    fn from_base_prime_field_elems(elems: impl IntoIterator<Item = Self::BasePrimeField>) -> Option<Self> {
+    fn from_base_prime_field_elems(
+        elems: impl IntoIterator<Item = Self::BasePrimeField>,
+    ) -> Option<Self> {
         let mut elems = elems.into_iter();
         let elems = elems.by_ref();
         let base_ext_deg = Fp6::extension_degree() as usize;

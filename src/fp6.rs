@@ -338,8 +338,6 @@ impl From<i128> for Fp6 {
     }
 }
 
-
-
 impl<'a> core::iter::Product<&'a Fp6> for Fp6 {
     fn product<I: Iterator<Item = &'a Fp6>>(iter: I) -> Self {
         iter.fold(Fp6::one(), |acc, x| acc * x)
@@ -519,7 +517,9 @@ impl ark_ff::Field for Fp6 {
             .into_iter()
     }
 
-    fn from_base_prime_field_elems(elems: impl IntoIterator<Item = Self::BasePrimeField>) -> Option<Self> {
+    fn from_base_prime_field_elems(
+        elems: impl IntoIterator<Item = Self::BasePrimeField>,
+    ) -> Option<Self> {
         let mut elems = elems.into_iter();
         let elems = elems.by_ref();
         let base_ext_deg = Fp2::extension_degree() as usize;

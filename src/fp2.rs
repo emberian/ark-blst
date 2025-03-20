@@ -487,7 +487,9 @@ impl ark_ff::Field for Fp2 {
             .into_iter()
     }
 
-    fn from_base_prime_field_elems(elems: impl IntoIterator<Item = Self::BasePrimeField>) -> Option<Self> {
+    fn from_base_prime_field_elems(
+        elems: impl IntoIterator<Item = Self::BasePrimeField>,
+    ) -> Option<Self> {
         let mut elems = elems.into_iter();
         let elems = elems.by_ref();
         let base_ext_deg = Self::BasePrimeField::extension_degree() as usize;
@@ -598,10 +600,7 @@ impl ark_ff::Field for Fp2 {
     }
 
     fn mul_by_base_prime_field(&self, elem: &Self::BasePrimeField) -> Self {
-        Self::new(
-            Fp(self.0.c0() * elem.0),
-            Fp(self.0.c1() * elem.0),
-        )
+        Self::new(Fp(self.0.c0() * elem.0), Fp(self.0.c1() * elem.0))
     }
 }
 

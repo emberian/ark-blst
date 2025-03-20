@@ -85,6 +85,7 @@ mod test {
     use crate::scalar::Scalar;
 
     use super::*;
+    use ark_ec::AffineRepr;
     use ark_ec::CurveGroup;
     use ark_ec::PrimeGroup;
     use ark_ff::UniformRand;
@@ -97,6 +98,15 @@ mod test {
         let p2s = G2Projective::generator() * s1;
         let left = <Bls12 as Pairing>::pairing(p1s.into_affine(), p2.into_affine());
         let right = <Bls12 as Pairing>::pairing(p1.into_affine(), p2s.into_affine());
-        assert!(left == right)
+        assert!(left == right);
+        let inf_g1 = G1Affine::zero();
+        let g2 = G2Affine::generator();
+        let result = Bls12::pairing(inf_g1, g2);
+        assert_eq!(result.0, Fp12::one());
+
+        let g1 = G1Affine::generator();
+        let inf_g2 = G2Affine::zero();
+        let result2 = Bls12::pairing(g1, inf_g2);
+        assert_eq!(result2.0, Fp12::one());
     }
 }

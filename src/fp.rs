@@ -552,7 +552,9 @@ impl ark_ff::Field for Fp {
         elems: impl IntoIterator<Item = Self::BasePrimeField>,
     ) -> Option<Self> {
         let mut elems = elems.into_iter();
-        elems.next().filter(|_| elems.count() == (Self::extension_degree() as usize - 1))
+        elems
+            .next()
+            .filter(|_| elems.count() == (Self::extension_degree() as usize - 1))
     }
 
     fn from_base_prime_field(elem: Self::BasePrimeField) -> Self {
@@ -646,7 +648,7 @@ impl ark_ff::Field for Fp {
         }
         Some(res)
     }
-    
+
     fn mul_by_base_prime_field(&self, elem: &Self::BasePrimeField) -> Self {
         self * elem
     }
@@ -718,9 +720,8 @@ pub mod tests {
         ];
 
         #[allow(non_upper_case_globals)]
-        const modmodt: super::Fp = super::Fp(blstrs::Fp::from_raw_unchecked(
-            slice_mod_minus_one_div_two,
-        ));
+        const modmodt: super::Fp =
+            super::Fp(blstrs::Fp::from_raw_unchecked(slice_mod_minus_one_div_two));
         let manual_blst = modmodt.to_bytes_le();
         let serialized_from_arkworks =
             serialize_to_blst(ark_bls12_381::Fq::MODULUS_MINUS_ONE_DIV_TWO);

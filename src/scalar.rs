@@ -530,9 +530,13 @@ impl ark_ff::Field for Scalar {
         iter::once(*self)
     }
 
-    fn from_base_prime_field_elems(elems: impl IntoIterator<Item = Self::BasePrimeField>) -> Option<Self> {
+    fn from_base_prime_field_elems(
+        elems: impl IntoIterator<Item = Self::BasePrimeField>,
+    ) -> Option<Self> {
         let mut elems = elems.into_iter();
-        elems.next().filter(|_| elems.count() == (Self::extension_degree() as usize - 1))
+        elems
+            .next()
+            .filter(|_| elems.count() == (Self::extension_degree() as usize - 1))
     }
 
     fn from_base_prime_field(elem: Self::BasePrimeField) -> Self {
