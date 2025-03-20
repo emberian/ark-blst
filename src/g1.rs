@@ -715,8 +715,13 @@ mod test {
 
     #[test]
     fn g1() {
-        group_test::<G1Projective>();
-        crate::tests::serialization_compatibility::<G1Projective, ark_bls12_381::G1Projective>();
+        for _ in 0..10 {
+            group_test::<G1Projective>();
+        }
+        for _ in 0..10 {
+            crate::tests::serialization_compatibility::<G1Projective, ark_bls12_381::G1Projective>(
+            );
+        }
     }
 
     // Unfortunately https://github.com/supranational/blst/blob/146dfa2e67a5cf87ff1e6cc41ea10f51f675a0fd/src/multi_scalar.c#L11

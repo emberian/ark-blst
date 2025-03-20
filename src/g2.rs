@@ -501,7 +501,6 @@ impl AddAssign<&mut G2Projective> for G2Projective {
     }
 }
 
-
 impl Mul<&mut Scalar> for G2Projective {
     type Output = G2Projective;
 
@@ -771,7 +770,12 @@ mod test {
 
     #[test]
     fn g2() {
-        group_test::<G2Projective>();
-        crate::tests::serialization_compatibility::<G2Projective, ark_bls12_381::G2Projective>();
+        for _ in 0..10 {
+            group_test::<G2Projective>();
+        }
+        for _ in 0..10 {
+            crate::tests::serialization_compatibility::<G2Projective, ark_bls12_381::G2Projective>(
+            );
+        }
     }
 }
