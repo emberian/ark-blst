@@ -5,8 +5,9 @@ use core::{
     fmt,
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
+use std::cmp::Ordering;
 
-use ark_ff::BigInteger;
+use ark_ff::{AdditiveGroup, BigInteger};
 use std::ops::{Div, DivAssign};
 
 use ark_ff::BigInt;
@@ -16,13 +17,32 @@ use ark_serialize::{
 };
 use ff::Field;
 use num_traits::{One, Zero};
-use std::iter;
 use std::{hash::Hasher, ops::Deref};
 use zeroize::Zeroize;
 
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct Fp12(blstrs::Fp12);
+
+impl PartialOrd for Fp12 {
+    #[inline(always)]
+    fn partial_cmp(&self, other: &Fp12) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Fp12 {
+    #[inline(always)]
+    fn cmp(&self, other: &Fp12) -> Ordering {
+        let c0: Fp6 = Fp6(self.c0());
+        let c1: Fp6 = Fp6(self.c1());
+        match c1.cmp(&Fp6(other.c1())) {
+            Ordering::Greater => Ordering::Greater,
+            Ordering::Less => Ordering::Less,
+            Ordering::Equal => c0.cmp(&Fp6(other.c0()))
+        }
+    }
+}
 
 impl Deref for Fp12 {
     type Target = blstrs::Fp12;
@@ -196,13 +216,13 @@ impl<'a> Mul<&'a mut Fp12> for Fp12 {
 
 impl One for Fp12 {
     fn one() -> Self {
-        Fp12(blstrs::Fp12::one())
+        Fp12(blstrs::Fp12::ONE)
     }
 }
 
 impl Zero for Fp12 {
     fn zero() -> Self {
-        Fp12(blstrs::Fp12::zero())
+        Fp12(blstrs::Fp12::ZERO)
     }
     fn is_zero(&self) -> bool {
         self.0.is_zero().into()
@@ -241,7 +261,7 @@ impl ark_serialize::CanonicalDeserialize for Fp12 {
         reader
             .read(&mut buff[..])
             .map_err(|_| SerializationError::InvalidData)?;
-        Option::from(blstrs::Fp12::from_bytes_le(&buff).map(|f| Fp12(f)))
+        Option::from(blstrs::Fp12::from_bytes_le(buff).map(|f| Fp12(f)))
             .ok_or(SerializationError::InvalidData)
     }
 }
@@ -299,7 +319,7 @@ macro_rules! impl_from {
     ($t:ty) => {
         impl From<$t> for Fp12 {
             fn from(value: $t) -> Self {
-                Fp12(blstrs::Fp12::from(value as u64))
+                Fp12(blstrs::Fp12::from(blstrs::Fp::from(value as u64)))
             }
         }
     };
@@ -309,9 +329,19 @@ impl_from!(u8);
 impl_from!(u16);
 impl_from!(u32);
 impl_from!(u64);
+impl_from!(i8);
+impl_from!(i16);
+impl_from!(i32);
+impl_from!(i64);
 
 impl From<u128> for Fp12 {
     fn from(value: u128) -> Self {
+        Fp12::new(Fp6::from(value), Fp6::zero())
+    }
+}
+
+impl From<i128> for Fp12 {
+    fn from(value: i128) -> Self {
         Fp12::new(Fp6::from(value), Fp6::zero())
     }
 }
@@ -429,7 +459,7 @@ impl ark_ff::UniformRand for Fp12 {
 impl From<num_bigint::BigUint> for Fp12 {
     fn from(value: num_bigint::BigUint) -> Self {
         Fp12(
-            blstrs::Fp12::from_bytes_le(memory::slice_to_constant_size(&value.to_bytes_le()))
+            blstrs::Fp12::from_bytes_le(*memory::slice_to_constant_size(&value.to_bytes_le()))
                 .unwrap(),
         )
     }
@@ -438,7 +468,7 @@ impl From<num_bigint::BigUint> for Fp12 {
 impl From<BigInt<12>> for Fp12 {
     fn from(value: BigInt<12>) -> Self {
         Fp12(
-            blstrs::Fp12::from_bytes_le(memory::slice_to_constant_size(&value.to_bytes_le()))
+            blstrs::Fp12::from_bytes_le(*memory::slice_to_constant_size(&value.to_bytes_le()))
                 .unwrap(),
         )
     }
@@ -448,7 +478,7 @@ impl From<ark_bls12_381::Fq2> for Fp12 {
     fn from(value: ark_bls12_381::Fq2) -> Self {
         let mut buff = Vec::with_capacity(576);
         value.serialize_compressed(&mut buff).unwrap();
-        Fp12(blstrs::Fp12::from_bytes_le(memory::slice_to_constant_size(&buff)).unwrap())
+        Fp12(blstrs::Fp12::from_bytes_le(*memory::slice_to_constant_size(&buff)).unwrap())
     }
 }
 impl From<Fp12> for num_bigint::BigUint {
@@ -464,58 +494,49 @@ impl Fp12 {
         Fp12(blstrs::Fp12::new(c0.0, c1.0))
     }
 }
-type BaseFieldIter<P> = <P as ark_ff::Field>::BasePrimeFieldIter;
-const FP6ZERO: Fp6 = <Fp6 as ark_ff::Field>::ZERO;
-const FP6ONE: Fp6 = <Fp6 as ark_ff::Field>::ONE;
+
+impl AdditiveGroup for Fp12 {
+    type Scalar = Fp12;
+
+    const ZERO: Self = Fp12::new(Fp6::ZERO, Fp6::ZERO);
+}
+
 impl ark_ff::Field for Fp12 {
     type BasePrimeField = crate::fp::Fp;
 
-    type BasePrimeFieldIter = iter::Chain<BaseFieldIter<Fp6>, BaseFieldIter<Fp6>>;
-
     const SQRT_PRECOMP: Option<ark_ff::SqrtPrecomputation<Self>> = None;
 
-    const ZERO: Self = Fp12::new(FP6ZERO, FP6ZERO);
-
-    const ONE: Self = Fp12::new(FP6ONE, FP6ZERO);
+    const ONE: Self = Fp12::new(Fp6::ONE, Fp6::ZERO);
 
     fn extension_degree() -> u64 {
         Self::BasePrimeField::extension_degree() * 12
     }
 
-    fn to_base_prime_field_elements(&self) -> Self::BasePrimeFieldIter {
+    fn to_base_prime_field_elements(&self) -> impl Iterator<Item = Self::BasePrimeField> {
         Fp6(self.0.c0())
             .to_base_prime_field_elements()
             .chain(Fp6(self.0.c1()).to_base_prime_field_elements())
+            .collect::<Vec<_>>()
+            .into_iter()
     }
 
-    fn from_base_prime_field_elems(elems: &[Self::BasePrimeField]) -> Option<Self> {
-        if elems.len() != (Self::extension_degree() as usize) {
-            return None;
+    fn from_base_prime_field_elems(elems: impl IntoIterator<Item = Self::BasePrimeField>) -> Option<Self> {
+        let mut elems = elems.into_iter();
+        let elems = elems.by_ref();
+        let base_ext_deg = Fp6::extension_degree() as usize;
+        let element = Some(Self::new(
+            Fp6::from_base_prime_field_elems(elems.take(base_ext_deg))?,
+            Fp6::from_base_prime_field_elems(elems.take(base_ext_deg))?,
+        ));
+        if elems.next().is_some() {
+            None
+        } else {
+            element
         }
-        let base_ext_deg = Self::BasePrimeField::extension_degree() as usize;
-        Some(Self::new(
-            Fp6::from_base_prime_field_elems(&elems[0..base_ext_deg]).unwrap(),
-            Fp6::from_base_prime_field_elems(&elems[base_ext_deg..]).unwrap(),
-        ))
     }
 
     fn from_base_prime_field(elem: Self::BasePrimeField) -> Self {
-        Self::new(Fp6::from_base_prime_field(elem), FP6ZERO)
-    }
-
-    #[inline]
-    fn double(&self) -> Self {
-        Fp12(self.0.double())
-    }
-
-    fn double_in_place(&mut self) -> &mut Self {
-        self.0 = self.0.double();
-        self
-    }
-
-    fn neg_in_place(&mut self) -> &mut Self {
-        self.0 = self.0.neg();
-        self
+        Self::new(Fp6::from_base_prime_field(elem), Fp6::ZERO)
     }
 
     fn from_random_bytes_with_flags<F: Flags>(_bytes: &[u8]) -> Option<(Self, F)> {
@@ -599,6 +620,15 @@ impl ark_ff::Field for Fp12 {
             }
         }
         Some(res)
+    }
+
+    fn mul_by_base_prime_field(&self, elem: &Self::BasePrimeField) -> Self {
+        let c0 = Fp6(self.c0());
+        let c1 = Fp6(self.c1());
+        Self::new(
+            c0.mul_by_base_prime_field(elem),
+            c1.mul_by_base_prime_field(elem),
+        )
     }
 }
 

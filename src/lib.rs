@@ -1,3 +1,6 @@
+#[macro_use]
+mod macros;
+
 pub mod fp;
 pub(crate) mod fp12;
 pub(crate) mod fp2;

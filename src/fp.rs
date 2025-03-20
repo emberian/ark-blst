@@ -5,7 +5,7 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use ark_ff::BigInteger;
+use ark_ff::{AdditiveGroup, BigInteger};
 use std::ops::{Div, DivAssign};
 use std::str::FromStr;
 
@@ -197,13 +197,13 @@ impl<'a> Mul<&'a mut Fp> for Fp {
 
 impl One for Fp {
     fn one() -> Self {
-        Fp(blstrs::Fp::one())
+        Fp(blstrs::Fp::ONE)
     }
 }
 
 impl Zero for Fp {
     fn zero() -> Self {
-        Fp(blstrs::Fp::zero())
+        Fp(blstrs::Fp::ZERO)
     }
     fn is_zero(&self) -> bool {
         self.0.is_zero().into()
@@ -309,9 +309,19 @@ impl_from!(u8);
 impl_from!(u16);
 impl_from!(u32);
 impl_from!(u64);
+impl_from!(i8);
+impl_from!(i16);
+impl_from!(i32);
+impl_from!(i64);
 
 impl From<u128> for Fp {
     fn from(value: u128) -> Self {
+        Fp(blstrs::Fp::from(value))
+    }
+}
+
+impl From<i128> for Fp {
+    fn from(value: i128) -> Self {
         Fp(blstrs::Fp::from(value))
     }
 }
@@ -473,22 +483,25 @@ impl From<Fp> for <Fp as PrimeField>::BigInt {
     }
 }
 
+impl AdditiveGroup for Fp {
+    type Scalar = Fp;
+    const ZERO: Self = Fp(blstrs::Fp::ZERO);
+}
+
 impl ark_ff::FftField for Fp {
     const GENERATOR: Self = Fp(blstrs::fp::R);
 
     const TWO_ADICITY: u32 = <ark_bls12_381::Fq as ark_ff::FftField>::TWO_ADICITY;
 
     //        Fp::from(<ark_bls12_381::Fq as ark_ff::FftField>::TWO_ADIC_ROOT_OF_UNITY);
-    const TWO_ADIC_ROOT_OF_UNITY: Self = Fp(blstrs::Fp(blst::blst_fp {
-        l: [
-            0xb9feffffffffaaaa,
-            0x1eabfffeb153ffff,
-            0x6730d2a0f6b0f624,
-            0x64774b84f38512bf,
-            0x4b1ba7b6434bacd7,
-            0x1a0111ea397fe69a,
-        ],
-    }));
+    const TWO_ADIC_ROOT_OF_UNITY: Self = Fp(blstrs::Fp::from_raw_unchecked([
+        0xb9feffffffffaaaa,
+        0x1eabfffeb153ffff,
+        0x6730d2a0f6b0f624,
+        0x64774b84f38512bf,
+        0x4b1ba7b6434bacd7,
+        0x1a0111ea397fe69a,
+    ]));
 }
 
 impl ark_ff::PrimeField for Fp {
@@ -523,11 +536,7 @@ impl ark_ff::PrimeField for Fp {
 impl ark_ff::Field for Fp {
     type BasePrimeField = Fp;
 
-    type BasePrimeFieldIter = iter::Once<Self::BasePrimeField>;
-
     const SQRT_PRECOMP: Option<ark_ff::SqrtPrecomputation<Self>> = None;
-
-    const ZERO: Self = Fp(blstrs::fp::ZERO);
 
     const ONE: Self = Fp(blstrs::fp::R);
 
@@ -535,34 +544,19 @@ impl ark_ff::Field for Fp {
         1
     }
 
-    fn to_base_prime_field_elements(&self) -> Self::BasePrimeFieldIter {
+    fn to_base_prime_field_elements(&self) -> impl Iterator<Item = Self::BasePrimeField> {
         iter::once(*self)
     }
 
-    fn from_base_prime_field_elems(elems: &[Self::BasePrimeField]) -> Option<Self> {
-        if elems.len() != (Self::extension_degree() as usize) {
-            return None;
-        }
-        Some(elems[0])
+    fn from_base_prime_field_elems(
+        elems: impl IntoIterator<Item = Self::BasePrimeField>,
+    ) -> Option<Self> {
+        let mut elems = elems.into_iter();
+        elems.next().filter(|_| elems.count() == (Self::extension_degree() as usize - 1))
     }
 
     fn from_base_prime_field(elem: Self::BasePrimeField) -> Self {
         elem
-    }
-
-    #[inline]
-    fn double(&self) -> Self {
-        Fp(self.0.double())
-    }
-
-    fn double_in_place(&mut self) -> &mut Self {
-        self.0 = self.0.double();
-        self
-    }
-
-    fn neg_in_place(&mut self) -> &mut Self {
-        self.0 = self.0.neg();
-        self
     }
 
     fn from_random_bytes_with_flags<F: Flags>(_bytes: &[u8]) -> Option<(Self, F)> {
@@ -652,6 +646,10 @@ impl ark_ff::Field for Fp {
         }
         Some(res)
     }
+    
+    fn mul_by_base_prime_field(&self, elem: &Self::BasePrimeField) -> Self {
+        self * elem
+    }
 }
 
 #[cfg(test)]
@@ -660,7 +658,6 @@ pub mod tests {
     use ark_ff::BigInteger;
     use ark_ff::FftField;
     use ark_ff::PrimeField;
-    use blst::*;
 
     fn print_slice_hex(slice: &[u64]) -> String {
         [
@@ -721,9 +718,9 @@ pub mod tests {
         ];
 
         #[allow(non_upper_case_globals)]
-        const modmodt: super::Fp = super::Fp(blstrs::Fp(blst_fp {
-            l: slice_mod_minus_one_div_two,
-        }));
+        const modmodt: super::Fp = super::Fp(blstrs::Fp::from_raw_unchecked(
+            slice_mod_minus_one_div_two,
+        ));
         let manual_blst = modmodt.to_bytes_le();
         let serialized_from_arkworks =
             serialize_to_blst(ark_bls12_381::Fq::MODULUS_MINUS_ONE_DIV_TWO);
@@ -741,11 +738,6 @@ pub mod tests {
             hex::encode(serialized_from_arkworks.to_bytes_le())
         );
         println!("ARKWORKS: 0x{}", hex::encode(arkwork_version));
-
-        println!(
-            "slice from blst serialized: {}",
-            print_slice_hex(serialized_from_arkworks.0.l.as_ref())
-        );
 
         // ----- just  random stuff
         //let r1 = ark_bls12_381::Fq::rand(&mut rand::thread_rng());

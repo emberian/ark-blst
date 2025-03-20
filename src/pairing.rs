@@ -86,7 +86,7 @@ mod test {
 
     use super::*;
     use ark_ec::CurveGroup;
-    use ark_ec::Group;
+    use ark_ec::PrimeGroup;
     use ark_ff::UniformRand;
     #[test]
     fn pairing() {

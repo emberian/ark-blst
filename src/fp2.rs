@@ -6,7 +6,7 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use ark_ff::BigInteger;
+use ark_ff::{AdditiveGroup, BigInteger};
 use std::ops::{Div, DivAssign};
 
 use ark_ff::BigInt;
@@ -16,7 +16,6 @@ use ark_serialize::{
 };
 use ff::Field;
 use num_traits::{One, Zero};
-use std::iter;
 use std::{hash::Hasher, ops::Deref};
 use zeroize::Zeroize;
 
@@ -184,13 +183,13 @@ impl<'a> Mul<&'a mut Fp2> for Fp2 {
 
 impl One for Fp2 {
     fn one() -> Self {
-        Fp2(blstrs::Fp2::one())
+        Fp2(blstrs::Fp2::ONE)
     }
 }
 
 impl Zero for Fp2 {
     fn zero() -> Self {
-        Fp2(blstrs::Fp2::zero())
+        Fp2(blstrs::Fp2::ZERO)
     }
     fn is_zero(&self) -> bool {
         self.0.is_zero().into()
@@ -199,7 +198,7 @@ impl Zero for Fp2 {
 
 impl Zeroize for Fp2 {
     fn zeroize(&mut self) {
-        self.0 = blstrs::Fp2::zero();
+        self.0 = blstrs::Fp2::ZERO;
     }
 }
 
@@ -229,7 +228,7 @@ impl ark_serialize::CanonicalDeserialize for Fp2 {
         reader
             .read(&mut buff[..])
             .map_err(|_| SerializationError::InvalidData)?;
-        Option::from(blstrs::Fp2::from_bytes_le(&buff).map(|f| Fp2(f)))
+        Option::from(blstrs::Fp2::from_bytes_le(buff).map(|f| Fp2(f)))
             .ok_or(SerializationError::InvalidData)
     }
 }
@@ -297,9 +296,19 @@ impl_from!(u8);
 impl_from!(u16);
 impl_from!(u32);
 impl_from!(u64);
+impl_from!(i8);
+impl_from!(i16);
+impl_from!(i32);
+impl_from!(i64);
 
 impl From<u128> for Fp2 {
     fn from(value: u128) -> Self {
+        Fp2::new(Fp::from(value), Fp::zero())
+    }
+}
+
+impl From<i128> for Fp2 {
+    fn from(value: i128) -> Self {
         Fp2::new(Fp::from(value), Fp::zero())
     }
 }
@@ -417,7 +426,7 @@ impl ark_ff::UniformRand for Fp2 {
 impl From<num_bigint::BigUint> for Fp2 {
     fn from(value: num_bigint::BigUint) -> Self {
         Fp2(
-            blstrs::Fp2::from_bytes_le(memory::slice_to_constant_size(&value.to_bytes_le()))
+            blstrs::Fp2::from_bytes_le(*memory::slice_to_constant_size(&value.to_bytes_le()))
                 .unwrap(),
         )
     }
@@ -426,7 +435,7 @@ impl From<num_bigint::BigUint> for Fp2 {
 impl From<BigInt<12>> for Fp2 {
     fn from(value: BigInt<12>) -> Self {
         Fp2(
-            blstrs::Fp2::from_bytes_le(memory::slice_to_constant_size(&value.to_bytes_le()))
+            blstrs::Fp2::from_bytes_le(*memory::slice_to_constant_size(&value.to_bytes_le()))
                 .unwrap(),
         )
     }
@@ -436,7 +445,7 @@ impl From<ark_bls12_381::Fq2> for Fp2 {
     fn from(value: ark_bls12_381::Fq2) -> Self {
         let mut buff = Vec::with_capacity(96);
         value.serialize_compressed(&mut buff).unwrap();
-        Fp2(blstrs::Fp2::from_bytes_le(memory::slice_to_constant_size(&buff)).unwrap())
+        Fp2(blstrs::Fp2::from_bytes_le(*memory::slice_to_constant_size(&buff)).unwrap())
     }
 }
 impl From<Fp2> for num_bigint::BigUint {
@@ -452,37 +461,45 @@ impl Fp2 {
         Fp2(blstrs::Fp2::new(c0.0, c1.0))
     }
 }
-type BaseFieldIter<P> = <<P as ark_ff::Field>::BasePrimeField as ark_ff::Field>::BasePrimeFieldIter;
+
+impl AdditiveGroup for Fp2 {
+    type Scalar = Fp2;
+
+    const ZERO: Self = Fp2(blstrs::Fp2::ZERO);
+}
+
 impl ark_ff::Field for Fp2 {
     type BasePrimeField = crate::fp::Fp;
 
-    type BasePrimeFieldIter = iter::Chain<BaseFieldIter<Self>, BaseFieldIter<Self>>;
-
     const SQRT_PRECOMP: Option<ark_ff::SqrtPrecomputation<Self>> = None;
 
-    const ZERO: Self = Fp2(blstrs::Fp2::new(blstrs::fp::ZERO, blstrs::fp::ZERO));
-
-    const ONE: Self = Fp2(blstrs::Fp2::new(blstrs::fp::R, blstrs::fp::ZERO));
+    const ONE: Self = Fp2(blstrs::Fp2::new(blstrs::fp::R, blstrs::Fp::ZERO));
 
     fn extension_degree() -> u64 {
         Self::BasePrimeField::extension_degree() * 2
     }
 
-    fn to_base_prime_field_elements(&self) -> Self::BasePrimeFieldIter {
+    fn to_base_prime_field_elements(&self) -> impl Iterator<Item = Self::BasePrimeField> {
         Fp(self.0.c0())
             .to_base_prime_field_elements()
             .chain(Fp(self.0.c1()).to_base_prime_field_elements())
+            .collect::<Vec<_>>()
+            .into_iter()
     }
 
-    fn from_base_prime_field_elems(elems: &[Self::BasePrimeField]) -> Option<Self> {
-        if elems.len() != (Self::extension_degree() as usize) {
-            return None;
-        }
+    fn from_base_prime_field_elems(elems: impl IntoIterator<Item = Self::BasePrimeField>) -> Option<Self> {
+        let mut elems = elems.into_iter();
+        let elems = elems.by_ref();
         let base_ext_deg = Self::BasePrimeField::extension_degree() as usize;
-        Some(Self::new(
-            Self::BasePrimeField::from_base_prime_field_elems(&elems[0..base_ext_deg]).unwrap(),
-            Self::BasePrimeField::from_base_prime_field_elems(&elems[base_ext_deg..]).unwrap(),
-        ))
+        let element = Some(Self::new(
+            Self::BasePrimeField::from_base_prime_field_elems(elems.take(base_ext_deg))?,
+            Self::BasePrimeField::from_base_prime_field_elems(elems.take(base_ext_deg))?,
+        ));
+        if elems.next().is_some() {
+            None
+        } else {
+            element
+        }
     }
 
     fn from_base_prime_field(elem: Self::BasePrimeField) -> Self {
@@ -490,21 +507,6 @@ impl ark_ff::Field for Fp2 {
             Self::BasePrimeField::from_base_prime_field(elem),
             Self::BasePrimeField::ZERO,
         )
-    }
-
-    #[inline]
-    fn double(&self) -> Self {
-        Fp2(self.0.double())
-    }
-
-    fn double_in_place(&mut self) -> &mut Self {
-        self.0 = self.0.double();
-        self
-    }
-
-    fn neg_in_place(&mut self) -> &mut Self {
-        self.0 = self.0.neg();
-        self
     }
 
     fn from_random_bytes_with_flags<F: Flags>(_bytes: &[u8]) -> Option<(Self, F)> {
@@ -593,6 +595,13 @@ impl ark_ff::Field for Fp2 {
             }
         }
         Some(res)
+    }
+
+    fn mul_by_base_prime_field(&self, elem: &Self::BasePrimeField) -> Self {
+        Self::new(
+            Fp(self.0.c0() * elem.0),
+            Fp(self.0.c1() * elem.0),
+        )
     }
 }
 

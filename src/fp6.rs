@@ -5,8 +5,9 @@ use core::{
     fmt,
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
+use std::cmp::Ordering;
 
-use ark_ff::BigInteger;
+use ark_ff::{AdditiveGroup, BigInteger, SqrtPrecomputation};
 use std::ops::{Div, DivAssign};
 
 use ark_ff::BigInt;
@@ -16,13 +17,36 @@ use ark_serialize::{
 };
 use ff::Field;
 use num_traits::{One, Zero};
-use std::iter;
 use std::{hash::Hasher, ops::Deref};
 use zeroize::Zeroize;
 
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
+use crate::fp::Fp;
+
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct Fp6(pub(crate) blstrs::Fp6);
+
+impl Ord for Fp6 {
+    #[inline(always)]
+    fn cmp(&self, other: &Fp6) -> Ordering {
+        match self.c2().cmp(&other.c2()) {
+            Ordering::Greater => Ordering::Greater,
+            Ordering::Less => Ordering::Less,
+            Ordering::Equal => match self.c1().cmp(&other.c1()) {
+                Ordering::Greater => Ordering::Greater,
+                Ordering::Less => Ordering::Less,
+                Ordering::Equal => self.c0().cmp(&other.c0()),
+            },
+        }
+    }
+}
+
+impl PartialOrd for Fp6 {
+    #[inline(always)]
+    fn partial_cmp(&self, other: &Fp6) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 impl Deref for Fp6 {
     type Target = blstrs::Fp6;
@@ -184,13 +208,13 @@ impl<'a> Mul<&'a mut Fp6> for Fp6 {
 
 impl One for Fp6 {
     fn one() -> Self {
-        Fp6(blstrs::Fp6::one())
+        Fp6(blstrs::Fp6::ONE)
     }
 }
 
 impl Zero for Fp6 {
     fn zero() -> Self {
-        Fp6(blstrs::Fp6::zero())
+        Fp6(blstrs::Fp6::ZERO)
     }
     fn is_zero(&self) -> bool {
         self.0.is_zero().into()
@@ -229,7 +253,7 @@ impl ark_serialize::CanonicalDeserialize for Fp6 {
         reader
             .read(&mut buff[..])
             .map_err(|_| SerializationError::InvalidData)?;
-        Option::from(blstrs::Fp6::from_bytes_le(&buff).map(|f| Fp6(f)))
+        Option::from(blstrs::Fp6::from_bytes_le(buff).map(|f| Fp6(f)))
             .ok_or(SerializationError::InvalidData)
     }
 }
@@ -297,12 +321,24 @@ impl_from!(u8);
 impl_from!(u16);
 impl_from!(u32);
 impl_from!(u64);
+impl_from!(i8);
+impl_from!(i16);
+impl_from!(i32);
+impl_from!(i64);
 
 impl From<u128> for Fp6 {
     fn from(value: u128) -> Self {
         Fp6::new(Fp2::from(value), Fp2::zero(), Fp2::zero())
     }
 }
+
+impl From<i128> for Fp6 {
+    fn from(value: i128) -> Self {
+        Fp6::new(Fp2::from(value), Fp2::zero(), Fp2::zero())
+    }
+}
+
+
 
 impl<'a> core::iter::Product<&'a Fp6> for Fp6 {
     fn product<I: Iterator<Item = &'a Fp6>>(iter: I) -> Self {
@@ -417,7 +453,7 @@ impl ark_ff::UniformRand for Fp6 {
 impl From<num_bigint::BigUint> for Fp6 {
     fn from(value: num_bigint::BigUint) -> Self {
         Fp6(
-            blstrs::Fp6::from_bytes_le(memory::slice_to_constant_size(&value.to_bytes_le()))
+            blstrs::Fp6::from_bytes_le(*memory::slice_to_constant_size(&value.to_bytes_le()))
                 .unwrap(),
         )
     }
@@ -426,7 +462,7 @@ impl From<num_bigint::BigUint> for Fp6 {
 impl From<BigInt<12>> for Fp6 {
     fn from(value: BigInt<12>) -> Self {
         Fp6(
-            blstrs::Fp6::from_bytes_le(memory::slice_to_constant_size(&value.to_bytes_le()))
+            blstrs::Fp6::from_bytes_le(*memory::slice_to_constant_size(&value.to_bytes_le()))
                 .unwrap(),
         )
     }
@@ -436,7 +472,7 @@ impl From<ark_bls12_381::Fq2> for Fp6 {
     fn from(value: ark_bls12_381::Fq2) -> Self {
         let mut buff = Vec::with_capacity(288);
         value.serialize_compressed(&mut buff).unwrap();
-        Fp6(blstrs::Fp6::from_bytes_le(memory::slice_to_constant_size(&buff)).unwrap())
+        Fp6(blstrs::Fp6::from_bytes_le(*memory::slice_to_constant_size(&buff)).unwrap())
     }
 }
 impl From<Fp6> for num_bigint::BigUint {
@@ -452,64 +488,55 @@ impl Fp6 {
         Fp6(blstrs::Fp6::new(c0.0, c1.0, c2.0))
     }
 }
-type BaseFieldIter<P> = <P as ark_ff::Field>::BasePrimeFieldIter;
-const FP2ZERO: Fp2 = <Fp2 as ark_ff::Field>::ZERO;
+
+impl AdditiveGroup for Fp6 {
+    type Scalar = Fp6;
+
+    const ZERO: Self = Fp6::new(Fp2::ZERO, Fp2::ZERO, Fp2::ZERO);
+}
+
 impl ark_ff::Field for Fp6 {
     type BasePrimeField = crate::fp::Fp;
 
-    type BasePrimeFieldIter =
-        iter::Chain<iter::Chain<BaseFieldIter<Fp2>, BaseFieldIter<Fp2>>, BaseFieldIter<Fp2>>;
-
-    const SQRT_PRECOMP: Option<ark_ff::SqrtPrecomputation<Self>> = None;
-
-    const ZERO: Self = Fp6::new(FP2ZERO, FP2ZERO, FP2ZERO);
+    const SQRT_PRECOMP: Option<SqrtPrecomputation<Fp6>> = None;
 
     const ONE: Self = Fp6::new(
-        Fp2(blstrs::Fp2::new(blstrs::fp::R, blstrs::fp::ZERO)),
-        FP2ZERO,
-        FP2ZERO,
+        Fp2(blstrs::Fp2::new(blstrs::fp::R, blstrs::Fp::ZERO)),
+        Fp2::ZERO,
+        Fp2::ZERO,
     );
 
     fn extension_degree() -> u64 {
         Self::BasePrimeField::extension_degree() * 6
     }
 
-    fn to_base_prime_field_elements(&self) -> Self::BasePrimeFieldIter {
+    fn to_base_prime_field_elements(&self) -> impl Iterator<Item = Self::BasePrimeField> {
         Fp2(self.0.c0())
             .to_base_prime_field_elements()
             .chain(Fp2(self.0.c1()).to_base_prime_field_elements())
             .chain(Fp2(self.0.c2()).to_base_prime_field_elements())
+            .collect::<Vec<_>>()
+            .into_iter()
     }
 
-    fn from_base_prime_field_elems(elems: &[Self::BasePrimeField]) -> Option<Self> {
-        if elems.len() != (Self::extension_degree() as usize) {
-            return None;
+    fn from_base_prime_field_elems(elems: impl IntoIterator<Item = Self::BasePrimeField>) -> Option<Self> {
+        let mut elems = elems.into_iter();
+        let elems = elems.by_ref();
+        let base_ext_deg = Fp2::extension_degree() as usize;
+        let element = Some(Self::new(
+            Fp2::from_base_prime_field_elems(elems.take(base_ext_deg))?,
+            Fp2::from_base_prime_field_elems(elems.take(base_ext_deg))?,
+            Fp2::from_base_prime_field_elems(elems.take(base_ext_deg))?,
+        ));
+        if elems.next().is_some() {
+            None
+        } else {
+            element
         }
-        let base_ext_deg = Self::BasePrimeField::extension_degree() as usize;
-        Some(Self::new(
-            Fp2::from_base_prime_field_elems(&elems[0..base_ext_deg]).unwrap(),
-            Fp2::from_base_prime_field_elems(&elems[base_ext_deg..]).unwrap(),
-            Fp2::from_base_prime_field_elems(&elems[base_ext_deg..]).unwrap(),
-        ))
     }
 
     fn from_base_prime_field(elem: Self::BasePrimeField) -> Self {
         Self::new(Fp2::from_base_prime_field(elem), Fp2::ZERO, Fp2::ZERO)
-    }
-
-    #[inline]
-    fn double(&self) -> Self {
-        Fp6(self.0.double())
-    }
-
-    fn double_in_place(&mut self) -> &mut Self {
-        self.0 = self.0.double();
-        self
-    }
-
-    fn neg_in_place(&mut self) -> &mut Self {
-        self.0 = self.0.neg();
-        self
     }
 
     fn from_random_bytes_with_flags<F: Flags>(_bytes: &[u8]) -> Option<(Self, F)> {
@@ -597,6 +624,22 @@ impl ark_ff::Field for Fp6 {
             }
         }
         Some(res)
+    }
+
+    fn mul_by_base_prime_field(&self, elem: &Self::BasePrimeField) -> Self {
+        fn conv(f: blstrs::Fp2) -> (blstrs::Fp, blstrs::Fp) {
+            (f.c0(), f.c1())
+        }
+
+        let mul_elem = |e: blstrs::Fp2| -> Fp2 {
+            let (c0, c1) = conv(e);
+            Fp2::new(Fp(c0 * elem.0), Fp(c1 * elem.0))
+        };
+        Self::new(
+            mul_elem(self.0.c0()),
+            mul_elem(self.0.c1()),
+            mul_elem(self.0.c2()),
+        )
     }
 }
 

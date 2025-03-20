@@ -5,7 +5,7 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use ark_ff::BigInteger;
+use ark_ff::{AdditiveGroup, BigInteger};
 use std::ops::{Div, DivAssign};
 use std::str::FromStr;
 
@@ -14,7 +14,7 @@ use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, EmptyFlags, Flags, SerializationError,
     Valid, Validate,
 };
-use ff::Field;
+use ff::{Field, PrimeField as ff_PrimeField};
 use num_traits::{One, Zero};
 use std::iter;
 use std::{hash::Hasher, ops::Deref};
@@ -184,13 +184,13 @@ impl<'a> Mul<&'a mut Scalar> for Scalar {
 
 impl One for Scalar {
     fn one() -> Self {
-        Scalar(blstrs::Scalar::one())
+        Scalar(blstrs::Scalar::ONE)
     }
 }
 
 impl Zero for Scalar {
     fn zero() -> Self {
-        Scalar(blstrs::Scalar::zero())
+        Scalar(blstrs::Scalar::ZERO)
     }
     fn is_zero(&self) -> bool {
         self.0.is_zero().into()
@@ -297,6 +297,11 @@ impl_from!(u16);
 impl_from!(u32);
 impl_from!(u64);
 impl_from!(u128);
+impl_from!(i8);
+impl_from!(i16);
+impl_from!(i32);
+impl_from!(i64);
+impl_from!(i128);
 
 impl<'a> core::iter::Product<&'a Scalar> for Scalar {
     fn product<I: Iterator<Item = &'a Scalar>>(iter: I) -> Self {
@@ -462,12 +467,17 @@ impl From<Scalar> for <Scalar as PrimeField>::BigInt {
     }
 }
 
+impl AdditiveGroup for Scalar {
+    type Scalar = Scalar;
+    const ZERO: Self = Scalar(blstrs::Scalar::ZERO);
+}
+
 impl ark_ff::FftField for Scalar {
     const GENERATOR: Self = Scalar(blstrs::scalar::GENERATOR);
 
     const TWO_ADICITY: u32 = blstrs::scalar::S;
 
-    const TWO_ADIC_ROOT_OF_UNITY: Self = Scalar(blstrs::scalar::ROOT_OF_UNITY);
+    const TWO_ADIC_ROOT_OF_UNITY: Self = Scalar(blstrs::Scalar::ROOT_OF_UNITY);
 }
 
 impl ark_ff::PrimeField for Scalar {
@@ -508,11 +518,7 @@ impl ark_ff::PrimeField for Scalar {
 impl ark_ff::Field for Scalar {
     type BasePrimeField = Scalar;
 
-    type BasePrimeFieldIter = iter::Once<Self::BasePrimeField>;
-
     const SQRT_PRECOMP: Option<ark_ff::SqrtPrecomputation<Self>> = None;
-
-    const ZERO: Self = Scalar(blstrs::scalar::ZERO);
 
     const ONE: Self = Scalar(blstrs::scalar::R);
 
@@ -520,15 +526,13 @@ impl ark_ff::Field for Scalar {
         1
     }
 
-    fn to_base_prime_field_elements(&self) -> Self::BasePrimeFieldIter {
+    fn to_base_prime_field_elements(&self) -> impl Iterator<Item = Self::BasePrimeField> {
         iter::once(*self)
     }
 
-    fn from_base_prime_field_elems(elems: &[Self::BasePrimeField]) -> Option<Self> {
-        if elems.len() != (Self::extension_degree() as usize) {
-            return None;
-        }
-        Some(elems[0])
+    fn from_base_prime_field_elems(elems: impl IntoIterator<Item = Self::BasePrimeField>) -> Option<Self> {
+        let mut elems = elems.into_iter();
+        elems.next().filter(|_| elems.count() == (Self::extension_degree() as usize - 1))
     }
 
     fn from_base_prime_field(elem: Self::BasePrimeField) -> Self {
@@ -536,17 +540,12 @@ impl ark_ff::Field for Scalar {
     }
 
     #[inline]
-    fn double(&self) -> Self {
-        Scalar(self.0.double())
+    fn square(&self) -> Self {
+        Scalar(self.0.square())
     }
 
-    fn double_in_place(&mut self) -> &mut Self {
-        self.0 = self.0.double();
-        self
-    }
-
-    fn neg_in_place(&mut self) -> &mut Self {
-        self.0 = self.0.neg();
+    fn square_in_place(&mut self) -> &mut Self {
+        self.0 = self.0.square();
         self
     }
 
@@ -561,15 +560,6 @@ impl ark_ff::Field for Scalar {
 
     fn legendre(&self) -> ark_ff::LegendreSymbol {
         todo!()
-    }
-
-    fn square(&self) -> Self {
-        Scalar(self.0.square())
-    }
-
-    fn square_in_place(&mut self) -> &mut Self {
-        self.0 = self.0.square();
-        self
     }
 
     #[allow(clippy::redundant_closure)]
@@ -639,6 +629,10 @@ impl ark_ff::Field for Scalar {
             }
         }
         Some(res)
+    }
+
+    fn mul_by_base_prime_field(&self, elem: &Self::BasePrimeField) -> Self {
+        Scalar(self.0 * elem.0)
     }
 }
 

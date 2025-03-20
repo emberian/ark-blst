@@ -6,35 +6,35 @@ rust-version = "1.63"
 license = "MIT OR Apache-2.0"
 description = "bls12-381 arkwork wrapper around blst library"
 repository = "https://github.com/nikkolasg/ark-blst"
-keywords = ["bls12381","bls12-381","snark","arkworks","blst"]
+keywords = ["bls12381", "bls12-381", "snark", "arkworks", "blst"]
 categories = ["cryptography"]
-authors = ["nikkolasg","vmx"]
+authors = ["nikkolasg", "vmx"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-blstrs = { version = "^0.6.1", features = ["__private_bench"] }
-ark-bls12-381 = { version = "0.4.0" }
-ark-ec = { version = "0.4.0", features = ["parallel", "std"] }
-ark-ff = { version = "0.4.0", features = ["parallel","asm","std"]}
-ark-std = { version = "0.4.0" }
-ark-serialize = { version = "0.4.0" }
-blst = { version = "=0.3.10", default-features = true }
+blstrs = { version = "^0.8.0", features = ["__private_bench"] }
+ark-bls12-381 = { version = "0.5.0" }
+ark-ec = { version = "0.5.0", features = ["parallel", "std"] }
+ark-ff = { version = "0.5.0", features = ["parallel", "asm", "std"] }
+ark-std = { version = "0.5.0" }
+ark-serialize = { version = "0.5.0" }
+blst = { version = "=0.3.14", default-features = true }
 ec-gpu = { version = "0.2.0", optional = true }
-ec-gpu-gen = { version = "0.5.1", optional = true }
+ec-gpu-gen = { version = "0.8.0", optional = true }
 num-bigint = "^0.4.3"
-ff = "0.12"
+ff = "0.14"
 num-traits = "^0.2.15"
 zeroize = "1.5.7"
-rand = "^0.8.5"
+rand = "0.9.0"
 hex = "0.4"
 byteorder = "1.4.3"
-group = "0.12.0"
-ark-crypto-primitives = { version = "^0.4", features = ["sponge","r1cs"] }
-rand_xorshift = "0.3.0"
+group = "0.14.0"
+ark-crypto-primitives = { version = "^0.5", features = ["sponge", "r1cs"] }
+rand_xorshift = "0.4.0"
 
 [dev-dependencies]
-ark-algebra-test-templates = { version = "0.4.0" }
+ark-algebra-test-templates = { version = "0.5.0" }
 criterion = { version = "0.3", features = ["html_reports"] }
 
 [[bench]]
@@ -47,16 +47,10 @@ harness = false
 
 
 [build-dependencies]
-blstrs = { version = "^0.6.1", features = ["__private_bench"] }
-ec-gpu-gen = "0.5.1"
+blstrs = { version = "^0.8.0", features = ["__private_bench"] }
+ec-gpu-gen = "0.8.0"
 
 [features]
-default = []
+default = ["opencl"]
 cuda = ["blstrs/gpu", "dep:ec-gpu", "dep:ec-gpu-gen", "ec-gpu-gen?/cuda"]
 opencl = ["blstrs/gpu", "dep:ec-gpu", "dep:ec-gpu-gen", "ec-gpu-gen?/opencl"]
-
-[patch.crates-io]
-blstrs = { git = "https://github.com/nikkolasg/blstrs", branch = "feat/arkwork" }
-ark-ec = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
-ark-ff = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }
-ark-serialize = { git = "https://github.com/vmx/algebra", branch = "affine-repr-xy-owned" }

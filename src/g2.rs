@@ -7,22 +7,22 @@ use core::{
 use ark_ec::{
     models::CurveConfig,
     scalar_mul::{variable_base::VariableBaseMSM, ScalarMul},
-    AffineRepr, CurveGroup, Group,
+    AffineRepr, CurveGroup, PrimeGroup,
 };
 #[cfg(any(feature = "cuda", feature = "opencl"))]
 use ark_ff::PrimeField;
-use ark_ff::Zero;
+use ark_ff::{AdditiveGroup, Zero};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, SerializationError, Valid, Validate,
 };
 use ark_std::{
     io::{Read, Write},
     rand::{
-        distributions::{Distribution, Standard},
+        distr::{Distribution, StandardUniform},
         Rng,
     },
 };
-use blstrs::{impl_add_sub, impl_add_sub_assign, impl_mul, impl_mul_assign};
+use ff::Field;
 use group::{prime::PrimeCurveAffine, Curve as _, Group as _};
 use zeroize::Zeroize;
 
@@ -271,7 +271,7 @@ impl Zeroize for G2Affine {
     }
 }
 
-impl Distribution<G2Affine> for Standard {
+impl Distribution<G2Affine> for StandardUniform {
     /// Generates a uniformly random instance of the curve.
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> G2Affine {
@@ -322,7 +322,6 @@ impl AffineRepr for G2Affine {
 
     /// Multiplies this element by the cofactor and output the
     /// resulting projective element.
-    #[must_use]
     fn mul_by_cofactor_to_group(&self) -> Self::Group {
         self.mul_bigint(Self::Config::COFACTOR)
     }
@@ -463,30 +462,70 @@ impl Zero for G2Projective {
     }
 }
 
-impl Distribution<G2Projective> for Standard {
+impl Distribution<G2Projective> for StandardUniform {
     /// Generates a uniformly random instance of the curve.
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> G2Projective {
         G2Projective::from(blstrs::G2Projective::random(rng))
     }
 }
+impl Sub<&G2Affine> for G2Affine {
+    type Output = G2Projective;
 
-impl Group for G2Projective {
+    #[inline]
+    fn sub(self, rhs: &G2Affine) -> Self::Output {
+        G2Projective(self.0 - blstrs::G2Projective::from(rhs.0))
+    }
+}
+
+impl Sub<G2Affine> for G2Affine {
+    type Output = G2Projective;
+
+    #[inline]
+    fn sub(self, rhs: G2Affine) -> Self::Output {
+        G2Projective(self.0 - blstrs::G2Projective::from(rhs.0))
+    }
+}
+
+impl SubAssign<&mut G2Projective> for G2Projective {
+    #[inline]
+    fn sub_assign(&mut self, rhs: &mut G2Projective) {
+        *self = *self - rhs;
+    }
+}
+
+impl AddAssign<&mut G2Projective> for G2Projective {
+    #[inline]
+    fn add_assign(&mut self, rhs: &mut G2Projective) {
+        *self = *self + rhs;
+    }
+}
+
+
+impl Mul<&mut Scalar> for G2Projective {
+    type Output = G2Projective;
+
+    #[inline]
+    fn mul(self, rhs: &mut Scalar) -> Self::Output {
+        G2Projective(self.0 * rhs.0)
+    }
+}
+
+impl AdditiveGroup for G2Projective {
+    type Scalar = Scalar;
+    const ZERO: Self = G2Projective(blstrs::G2Projective::from_raw_unchecked(
+        blstrs::Fp2::ZERO,
+        blstrs::Fp2::ZERO,
+        blstrs::Fp2::ZERO,
+    ));
+}
+
+impl PrimeGroup for G2Projective {
     type ScalarField = <Config as CurveConfig>::ScalarField;
 
     #[inline]
     fn generator() -> Self {
         blstrs::G2Projective::generator().into()
-    }
-
-    /// Sets `self = 2 * self`. Note that Jacobian formulae are incomplete, and
-    /// so doubling cannot be computed as `self + self`. Instead, this
-    /// implementation uses the following specialized doubling formulae:
-    /// * [`P::A` is zero](http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l)
-    /// * [`P::A` is not zero](https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-dbl-2007-bl)
-    fn double_in_place(&mut self) -> &mut Self {
-        *self = G2Projective::from(self.0.double());
-        self
     }
 
     #[inline]

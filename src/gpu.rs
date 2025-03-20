@@ -2,8 +2,8 @@
 
 use std::{any::TypeId, ops::AddAssign};
 
-use ark_ec::{AffineRepr, Group};
-use ark_ff::Zero;
+use ark_ec::AffineRepr;
+use ark_ff::{AdditiveGroup, Zero};
 use ec_gpu::{GpuField, GpuName};
 use ec_gpu_gen::{
     rust_gpu_tools::{program_closures, Device, Program},

@@ -1,15 +1,15 @@
 use ark_ec::CurveGroup;
-use ark_ec::Group;
+use ark_ec::PrimeGroup;
 use ark_ff::UniformRand;
 use criterion::{criterion_group, criterion_main, Bencher, Criterion};
 
-pub fn bench_group_addition<G: Group>(b: &mut Bencher) {
+pub fn bench_group_addition<G: PrimeGroup>(b: &mut Bencher) {
     let r = G::rand(&mut rand::thread_rng());
     let s = G::rand(&mut rand::thread_rng());
     b.iter(|| r + s);
 }
 
-pub fn bench_group_multiplication<G: Group>(b: &mut Bencher) {
+pub fn bench_group_multiplication<G: PrimeGroup>(b: &mut Bencher) {
     let r = G::rand(&mut rand::thread_rng());
     let s = G::ScalarField::rand(&mut rand::thread_rng());
     b.iter(|| r.mul(s));

@@ -1,27 +1,27 @@
 use ark_ec::{
     models::CurveConfig,
     scalar_mul::{variable_base::VariableBaseMSM, ScalarMul},
-    AffineRepr, CurveGroup, Group,
+    AffineRepr, CurveGroup, PrimeGroup,
 };
 #[cfg(any(feature = "cuda", feature = "opencl"))]
 use ark_ff::PrimeField;
-use ark_ff::Zero;
+use ark_ff::{AdditiveGroup, Zero};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, SerializationError, Valid, Validate,
 };
 use ark_std::{
     io::{Read, Write},
     rand::{
-        distributions::{Distribution, Standard},
+        distr::{Distribution, StandardUniform},
         Rng,
     },
 };
-use blstrs::{impl_add_sub, impl_add_sub_assign, impl_mul, impl_mul_assign};
 use core::{
     fmt,
     hash::{Hash, Hasher},
     ops::{Add, AddAssign, Deref, Mul, MulAssign, Neg, Sub, SubAssign},
 };
+use ff::Field;
 use group::{prime::PrimeCurveAffine, Curve as _, Group as _};
 use zeroize::Zeroize;
 
@@ -212,6 +212,47 @@ impl MulAssign<&Scalar> for G1Affine {
     }
 }
 
+impl Sub<&G1Affine> for G1Affine {
+    type Output = G1Projective;
+
+    #[inline]
+    fn sub(self, rhs: &G1Affine) -> Self::Output {
+        G1Projective(self.0 - blstrs::G1Projective::from(rhs.0))
+    }
+}
+
+impl Sub<G1Affine> for G1Affine {
+    type Output = G1Projective;
+
+    #[inline]
+    fn sub(self, rhs: G1Affine) -> Self::Output {
+        G1Projective(self.0 - blstrs::G1Projective::from(rhs.0))
+    }
+}
+
+impl SubAssign<&mut G1Projective> for G1Projective {
+    #[inline]
+    fn sub_assign(&mut self, rhs: &mut G1Projective) {
+        *self = *self - rhs;
+    }
+}
+
+impl AddAssign<&mut G1Projective> for G1Projective {
+    #[inline]
+    fn add_assign(&mut self, rhs: &mut G1Projective) {
+        *self = *self + rhs;
+    }
+}
+
+impl Mul<&mut Scalar> for G1Projective {
+    type Output = G1Projective;
+
+    #[inline]
+    fn mul(self, rhs: &mut Scalar) -> Self::Output {
+        G1Projective(self.0 * rhs.0)
+    }
+}
+
 impl_add_sub!(G1Projective);
 impl_add_sub!(G1Projective, G1Affine);
 impl_add_sub!(G1Affine, G1Projective, G1Projective);
@@ -291,7 +332,7 @@ impl Zeroize for G1Affine {
     }
 }
 
-impl Distribution<G1Affine> for Standard {
+impl Distribution<G1Affine> for StandardUniform {
     /// Generates a uniformly random instance of the curve.
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> G1Affine {
@@ -342,7 +383,6 @@ impl AffineRepr for G1Affine {
 
     /// Multiplies this element by the cofactor and output the
     /// resulting projective element.
-    #[must_use]
     fn mul_by_cofactor_to_group(&self) -> Self::Group {
         self.mul_bigint(Self::Config::COFACTOR)
     }
@@ -483,7 +523,7 @@ impl Zero for G1Projective {
     }
 }
 
-impl Distribution<G1Projective> for Standard {
+impl Distribution<G1Projective> for StandardUniform {
     /// Generates a uniformly random instance of the curve.
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> G1Projective {
@@ -491,22 +531,22 @@ impl Distribution<G1Projective> for Standard {
     }
 }
 
-impl Group for G1Projective {
+impl AdditiveGroup for G1Projective {
+    type Scalar = Scalar;
+
+    const ZERO: Self = G1Projective(blstrs::G1Projective::from_raw_unchecked(
+        blstrs::Fp::ZERO,
+        blstrs::Fp::ZERO,
+        blstrs::Fp::ZERO,
+    ));
+}
+
+impl PrimeGroup for G1Projective {
     type ScalarField = <Config as CurveConfig>::ScalarField;
 
     #[inline]
     fn generator() -> Self {
         blstrs::G1Projective::generator().into()
-    }
-
-    /// Sets `self = 2 * self`. Note that Jacobian formulae are incomplete, and
-    /// so doubling cannot be computed as `self + self`. Instead, this
-    /// implementation uses the following specialized doubling formulae:
-    /// * [`P::A` is zero](http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l)
-    /// * [`P::A` is not zero](https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-dbl-2007-bl)
-    fn double_in_place(&mut self) -> &mut Self {
-        *self = G1Projective::from(self.0.double());
-        self
     }
 
     #[inline]
